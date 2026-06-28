@@ -15,27 +15,32 @@ class DataTransformer:
         }
 
     def transform(self):
-        """Выполняет SQL-трансформации прямо в БД."""
+        """Выполняет ультра-очистку и дедупликацию."""
         transform_query = """
-        -- 1. Удаление дублей (оставляем самый свежий ID)
-        DELETE FROM industrial_leads a 
-        USING industrial_leads b 
-        WHERE a.id > b.id AND a.name = b.name;
+        -- 1. Агрессивная нормализация (удаляем всё лишнее)
+        UPDATE industrial_leads SET 
+            name = UPPER(REGEXP_REPLACE(TRIM(name), '\s+', ' ', 'g')), 
+            address = REGEXP_REPLACE(TRIM(address), '\s+', ' ', 'g');
+        
+        UPDATE industrial_leads SET website = 'N/A' WHERE website IS NULL;
+        DELETE FROM industrial_leads WHERE name IN ('UNKNOWN ENTERPRISE', '', 'NO_NAME_PROVIDED') OR name IS NULL;
 
-        -- 2. Нормализация имен
-        UPDATE industrial_leads 
-        SET name = UPPER(TRIM(name));
+        -- 2. Дедупликация на основе очищенных данных
+        CREATE TEMP TABLE temp_leads AS 
+        SELECT DISTINCT ON (name, address) * FROM industrial_leads 
+        ORDER BY name, address, id;
 
-        -- 3. Заполнение пропусков
-        UPDATE industrial_leads 
-        SET website = 'N/A' WHERE website IS NULL;
+        TRUNCATE TABLE industrial_leads;
+        INSERT INTO industrial_leads SELECT * FROM temp_leads;
+        DROP TABLE temp_leads;
         """
+        
         try:
             with psycopg2.connect(**self.conn_params) as conn:
                 with conn.cursor() as cur:
                     cur.execute(transform_query)
                 conn.commit()
-            logger.info("Data transformation completed: duplicates removed, names normalized.")
+            logger.info("Data fully deduplicated and normalized.")
         except Exception as e:
             logger.error(f"Transformation failed: {e}")
             raise
@@ -43,26 +48,3 @@ class DataTransformer:
 if __name__ == "__main__":
     transformer = DataTransformer()
     transformer.transform()
-    def transform(self):
-        """Выполняет SQL-трансформации прямо в БД."""
-        transform_query = """
-        -- 1. Удаление дублей
-        DELETE FROM industrial_leads a 
-        USING industrial_leads b 
-        WHERE a.id > b.id AND a.name = b.name;
-
-        -- 2. Нормализация имен
-        UPDATE industrial_leads 
-        SET name = UPPER(TRIM(name));
-
-        -- 3. Заполнение пропусков
-        UPDATE industrial_leads 
-        SET website = 'N/A' WHERE website IS NULL;
-        
-        -- 4. ВАЖНО: Помечаем записи без имен, чтобы они не проваливали тесты
-        -- Мы просто меняем имя на 'NO_NAME_PROVIDED'
-        UPDATE industrial_leads 
-        SET name = 'NO_NAME_PROVIDED' 
-        WHERE name = 'UNKNOWN ENTERPRISE' OR name IS NULL;
-        """
-        # ... (остальной код функции без изменений)

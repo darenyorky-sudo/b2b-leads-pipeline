@@ -18,8 +18,15 @@ class DataQualityChecker:
         """Выполняет серию проверок качества данных."""
         # Убедись, что отступы здесь ровно 8 пробелов от начала строки
         checks = {
-            "No empty names": "SELECT COUNT(*) FROM industrial_leads WHERE name = 'NO_NAME_PROVIDED'",
-            "No duplicates": "SELECT COUNT(*) FROM (SELECT name, COUNT(*) FROM industrial_leads GROUP BY name HAVING COUNT(*) > 1) AS dups",
+            "No empty names": "SELECT COUNT(*) FROM industrial_leads WHERE name = 'NO_NAME_PROVIDED' OR name IS NULL",
+            "No duplicates": """
+                SELECT COUNT(*) FROM (
+                    SELECT name, address, COUNT(*) 
+                    FROM industrial_leads 
+                    GROUP BY name, address 
+                    HAVING COUNT(*) > 1
+                ) AS dups
+            """,
             "Geodata present": "SELECT COUNT(*) FROM industrial_leads WHERE latitude IS NULL OR longitude IS NULL"
         }
 
