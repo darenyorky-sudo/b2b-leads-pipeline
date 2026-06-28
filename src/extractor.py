@@ -5,7 +5,7 @@ from pathlib import Path
 import aiohttp
 from src.models import IndustrialLead, ExtractorConfig
 
-# Настройка логирования уровня Production
+# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -21,16 +21,18 @@ class OverpassExtractor:
     def _build_query(self, region_name: str) -> str:
         """
         Формирует отказоустойчивый запрос к Overpass API.
-        Ищет промышленные объекты, склады и офисы в указанном регионе.
+        Ищет конкретные предприятия (works) и коммерческие офисы.
         """
         return f"""
         [out:json][timeout:{self.config.timeout}];
         area["name"="{region_name}"]->.searchArea;
         (
-          node["industrial"](area.searchArea);
-          way["industrial"](area.searchArea);
+          node["man_made"="works"](area.searchArea);
+          way["man_made"="works"](area.searchArea);
           node["office"="energy"](area.searchArea);
+          way["office"="energy"](area.searchArea);
           node["office"="company"](area.searchArea);
+          way["office"="company"](area.searchArea);
         );
         out center;
         """
@@ -68,18 +70,18 @@ class OverpassExtractor:
             try:
                 tags = elem.get("tags", {})
                 
-                # Извлекаем координаты (у путей 'way' они находятся в 'center')
+                # Извлекаем координаты
                 lat = elem.get("lat") or elem.get("center", {}).get("lat")
                 lon = elem.get("lon") or elem.get("center", {}).get("lon")
                 
                 if not lat or not lon:
-                    continue  # Пропускаем объекты без геоданных
+                    continue
 
                 # Формируем плоскую структуру для Pydantic
                 lead_data = {
                     "id": elem["id"],
                     "name": tags.get("name") or tags.get("operator"),
-                    "amenity": tags.get("industrial") or tags.get("office") or "industrial_zone",
+                    "amenity": tags.get("man_made") or tags.get("office") or "industrial_zone",
                     "latitude": lat,
                     "longitude": lon,
                     "phone": tags.get("phone") or tags.get("contact:phone"),
@@ -97,11 +99,10 @@ class OverpassExtractor:
         return validated_leads
 
     def save_to_jsonl(self, leads: list[IndustrialLead], output_path: Path):
-        """Сохраняет валидированные данные в файлы формата JSONLines (Data Lake Raw Layer)."""
+        """Сохраняет валидированные данные в файлы формата JSONLines."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             for lead in leads:
-                # model_dump_json() автоматически переводит Pydantic-модель в строку JSON
                 f.write(lead.model_dump_json() + "\n")
         logger.info(f"Data successfully saved to Data Lake: {output_path}")
 
@@ -109,12 +110,11 @@ async def main():
     config = ExtractorConfig()
     extractor = OverpassExtractor(config)
     
-    # Конфигурируем регион сбора данных
-    target_region = "Атырауская область"
+    # Город вшит жестко
+    target_region = "Атырау"
     output_file = Path("data/raw_leads.jsonl")
 
     try:
-        # Исправленная строка: убрано лишнее присваивание
         raw_data = await extractor.fetch_raw_data(target_region)
         validated_leads = extractor.parse_and_validate(raw_data)
         extractor.save_to_jsonl(validated_leads, output_file)
