@@ -1,0 +1,6 @@
+id,name,lead_type,latitude,longitude,phone,website,address
+12462786816,2ГИС,company,47.095217,51.9246242,+7 771 929 0107;+7 966 5000050,https://dev.2gis.kz,
+936944781,3GI,industrial,46.0574815,53.3696045,,N/A,
+11158308944,3GI \ ЗСГТП,works,46.0566142,53.3703247,,N/A,
+670170686,3GP,industrial,46.1302005,53.3692619,,N/A,
+936143963,3GP TCT,yes,46.1376097,53.3694658,,N/A,
